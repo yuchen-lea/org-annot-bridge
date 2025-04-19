@@ -1,10 +1,48 @@
 #+TITLE: 帮助文档
 
-⭐ v2 版本将不再依赖 [[https://github.com/weirdNox/org-noter][org-noter]] ，专注于笔记的抽取、引文链接的维护等功能。等到 v2 功能完备，v2 将变为主分支。
-* 介绍
-帮助你在 org-mode 中更好地进行读书笔记。
-* 安装与配置
-- 安装 pdfhelper [[https://github.com/yuchen-lea/pdfhelper][yuchen-lea/pdfhelper: Some useful functions to process pdf file]]
-* 使用
+
+* 🌟 功能介绍
+
+=org-annot-bridge= 可以帮你在 *外部文档的笔记* 和 *org-mode 笔记* 之间进行交互。基本功能：
+
+1. PDF → org-mode：通过 [[https://github.com/yuchen-lea/pdfhelper/tree/master][pdfhelper]] 异步提取 PDF 注释到 org-mode 笔记
+   - 支持高亮、框选、手写等多种 PDF 注释类型，并存储相关的图像。
+   - 使用 [[https://pypi.org/project/Mako/][Mako]] 模板，自由定制导出的笔记格式
+2. org-mode → PDF：通过 [[https://github.com/fuxialexander/org-pdftools][org-pdftools]] 提供的链接跳转到 PDF
+   - ➡️ 计划自行实现跳转到 PDF 的链接类型，因为 [[https://github.com/fuxialexander/org-pdftools][org-pdftools]] 提供的功能有些繁杂，而且强依赖 [[https://github.com/weirdNox/org-noter][org-noter]]，另一个功能过于繁杂的插件
+3. ➡️ EPUB ⇌ org-mode：进行中，计划基于 [[https://depp.brause.cc/nov.el/img/][nov.el: Major mode for reading EPUBs in Emacs]]
+
+* 🚀 快速指南
+
+1. 安装 pdfhelper [[https://github.com/yuchen-lea/pdfhelper][yuchen-lea/pdfhelper: Some useful functions to process pdf file]]
+2. 安装并加载本包
+   - doom 用户
+     1. 安装
+         #+BEGIN_SRC emacs-lisp :tangle "packages.el"
+      (package! org-annot-bridge :recipe (:host github :repo "yuchen-lea/org-annot-bridge"))
+
+         #+END_SRC
+     2. 配置
+          #+BEGIN_SRC emacs-lisp
+      (use-package! org-media-note
+      :config
+      (setq org-annot-bridge-image-dir "~/Notes/imgs/")  ;; 用于存储PDF中提取的图片
+      )
+          #+END_SRC
+3. 调用 =org-annot-bridge-export-pdf-annot-transient=，交互式地配置相应参数后，回车执行导出。
+
+* 📖 功能详解
+- 可配置
+  + =org-annot-bridge-find-pdf-file-function= PDF 文件查找函数。
+  + 图像相关
+    - =org-annot-bridge-image-dir= 图像存储目录。
+    - =org-annot-bridge-image-zoom-factor= 图像导出的 zoom factor
+  + 格式相关：详见 [[https://github.com/yuchen-lea/pdfhelper][pdfhelper]] 帮助
+    - =org-annot-bridge-annot-template= annot 格式模板
+    - =org-annot-bridge-toc-template= 目录格式模板
+
+* 🛠️ 依赖
+-  [[https://github.com/yuchen-lea/pdfhelper][pdfhelper]]
+
 * 相关插件
 - [[https://github.com/novoid/extract_pdf_annotations_to_orgmode][novoid/extract_pdf_annotations_to_orgmode: Extracting RepliGo PDF annotations to a Org-mode format snippet (unmaintained!)]] shell 脚本，适用范围较为有限
