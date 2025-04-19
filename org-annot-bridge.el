@@ -24,11 +24,12 @@
 ;;;; Requirements
 
 (require 'bookmark)
+(require 'transient)
 
 ;;;; Customization
 
 (defgroup org-annot-bridge nil
-  "Build bridge between annot and org-mode."
+  "Build bridge between annot and org note."
   :prefix "org-annot-bridge-"
   :group 'org)
 
@@ -61,8 +62,11 @@ https://github.com/yuchen-lea/pdfhelper"
   "List of paths to .bib files to find cite key."
   :type '(repeat file))
 
+(defcustom org-annot-bridge-find-pdf-file-function (lambda ()
+                                                     nil)
+  "Function to find pdf file."
+  :type 'function)
 
-;;;; Variables
 ;;;; Commands
 
 (defun org-annot-bridge-check-pdfhelper-version ()
@@ -71,7 +75,7 @@ https://github.com/yuchen-lea/pdfhelper"
   (let ((pdfhelper-path (executable-find "pdfhelper"))
         (required-version "2.3.1"))
     (if (not pdfhelper-path)
-        (error "pdfhelper command-line program is not found. Please install it from https://github.com/yuchen-lea/pdfhelper")
+        (error "Command pdfhelper is not found. Please install it from https://github.com/yuchen-lea/pdfhelper")
       (let ((current-version (string-trim (shell-command-to-string "pdfhelper --version"))))
         (if (version< current-version required-version)
             (error "Your pdfhelper version (%s) is outdated. Please upgrade to the latest version from https://github.com/yuchen-lea/pdfhelper"
@@ -80,25 +84,42 @@ https://github.com/yuchen-lea/pdfhelper"
 
 ;;;;; PDF
 
-;;;###autoload
-(defun org-annot-bridge-insert-pdf-annots (pdf-path)
-  "Insert annotations of a PDF file using pdfhelper.
-If PDF-PATH is not provided, prompt the user to select a PDF file."
-  (interactive (list (read-file-name "Select a PDF file: " nil
-                                     nil t)))
+(defun org-annot-bridge-pdfhelper-export-annot (&optional args)
+  "Run `pdfhelper export-annot` with the provided options."
+  (interactive (list (transient-args 'org-annot-bridge-export-pdf-annot-transient)))
   (org-annot-bridge-check-pdfhelper-version)
-  (unless (and (f-exists? pdf-path)
-               (string= (file-name-extension pdf-path)
-                        "pdf"))
-    (error "The provided file is not a valid PDF"))
-  ;; Execute the shell command asynchronously
   (bookmark-set "org-annot-bridge-temp-bookmark")
-  (let* ((output-buffer (generate-new-buffer "*pdfhelper-output*"))
+  (let* ((pdf-file (or (funcall org-annot-bridge-find-pdf-file-function)
+                       (read-file-name "Choose PDF file: "
+                                       nil
+                                       nil
+                                       t
+                                       nil
+                                       (lambda (f)
+                                         (string-match-p "\\.pdf\\'" f)))))
+         (output-buffer (generate-new-buffer "*pdfhelper-output*"))
+         (cmd (mapconcat #'identity
+                         (list "pdfhelper export-annot"
+                               (string-join (mapcar (lambda (arg)
+                                                      (replace-regexp-in-string "=" " " arg))
+                                                    args)
+                                            " ")
+                               (format "--annot-image-dir '%s'" org-annot-bridge-image-dir)
+                               (if org-annot-bridge-bib-files
+                                   (format "--bib-path %s"
+                                           (mapconcat (lambda (item)
+                                                        (format "'%s'" item))
+                                                      org-annot-bridge-bib-files
+                                                      " ")))
+                               (if org-annot-bridge-annot-template
+                                   (format "--annot-list-item-format '%s'" org-annot-bridge-annot-template))
+                               (if org-annot-bridge-toc-template
+                                   (format "--toc-list-item-format '%s'" org-annot-bridge-toc-template))
+                               (format "'%s'" pdf-file))
+                         " "))
          (async-shell-command-display-buffer nil)
          (proc (progn
-                 (async-shell-command (org-noter-note--pdfhelper-export-annot-cmd
-                                       pdf-path)
-                                      output-buffer)
+                 (async-shell-command cmd output-buffer)
                  (get-buffer-process output-buffer))))
     (if (process-live-p proc)
         (set-process-sentinel proc
@@ -108,42 +129,33 @@ If PDF-PATH is not provided, prompt the user to select a PDF file."
                                     (bookmark-jump "org-annot-bridge-temp-bookmark")
                                     (sleep-for 1)
                                     (goto-char (org-element-property :end (org-element-context)))
-                                    (yank)
+                                    (insert-buffer-substring (process-buffer process))
                                     (bookmark-delete "org-annot-bridge-temp-bookmark")
+                                    (kill-buffer (process-buffer process))
                                     (shell-command-sentinel process signal))))
       (message-box "No process running."))))
 
-(defun org-noter-note--pdfhelper-export-annot-cmd (pdf-path)
-  (let* ((test-p (y-or-n-p "Run a test first?"))
-         ;; (ocr-p (y-or-n-p "OCR on picture?"))
-         (with-toc (y-or-n-p "With Toc?"))
-         ;; (ocr-service (if ocr-p (ido-completing-read "Pick ocr services:" '("paddle" "ocrspace")) ""))
-         ;; (ocr-language (if (string= ocr-service "ocrspace") (ido-completing-read "Pick ocr language:" '("zh-Hans" "zh-Hant" "en" "ja")) ""))
-         (zoom-factor (read-number "Enter image zoom factor: " org-annot-bridge-image-zoom-factor)))
-    (mapconcat #'identity
-               (list "pdfhelper export-annot"
-                     (if with-toc "--with-toc" "")
-                     (format "--image-zoom %s"
-                             (if (> zoom-factor 0) zoom-factor w))
-                     ;; (if ocr-p
-                     ;;     (format "--ocr-service '%s'" ocr-service)
-                     ;;   "")
-                     ;; (format "--ocr-language '%s'" ocr-language)
-                     (format "--annot-image-dir '%s'" org-annot-bridge-image-dir)
-                     (if org-annot-bridge-bib-files (format "--bib-path %s" (mapconcat (lambda (item) (format "'%s'" item)) org-annot-bridge-bib-files " ")))
-                     (if org-annot-bridge-annot-template (format "--annot-list-item-format '%s'" org-annot-bridge-annot-template))
-                     (if org-annot-bridge-toc-template (format "--toc-list-item-format '%s'" org-annot-bridge-toc-template))
-                     (if test-p "--run-test")
-                     (format "'%s'" pdf-path)
-                     ;; TODO cross-platform
-                     (format "| %s"
-                             (cond
-                              ((eq system-type 'gnu/linux) "xclip")
-                              ((eq system-type 'darwin) "pbcopy")
-                              ((memq system-type
-                                     '(cygwin windows-nt ms-dos)) "clip.exe"))))
-               " ")))
-;;;; Footer
 
+(transient-define-prefix org-annot-bridge-export-pdf-annot-transient ()
+  "Transient for `pdfhelper export-annot`."
+  ["Arguments"
+   ;; ("-o" "OCR Service" completing-read "OCR Service: " '("paddle" "ocrspace"))
+   ;; ("-l" "OCR Language" completing-read "OCR Language: " '("zh-Hans" "zh-Hant" "en" "ja"))
+   ;; ;; (if ocr-p
+   ;; ;;     (format "--ocr-service '%s'" ocr-service)
+   ;; ;;   "")
+   ;; ;; (format "--ocr-language '%s'" ocr-language)
+   ("z" "Image Zoom Factor" "--image-zoom=" :always-read t  :allow-empty nil
+    :init-value (lambda (obj) (oset obj value (number-to-string org-annot-bridge-image-zoom-factor))))
+   ("t" "With TOC" "--with-toc"
+    :init-value (lambda (obj) (oset obj value "--with-toc")))
+   ("s" "Creation Start" "--creation-start=" :prompt "Annot Creation Start YYYY-MM-DD: ")
+   ("e" "Creation End" "--creation-end=" :prompt "Annot Creation End YYYY-MM-DD: ")
+   ("r" "Run Test"  "--run-test")]
+  ["Actions"
+   ("RET" "export-annot" org-annot-bridge-pdfhelper-export-annot)])
+
+
+;;;; Footer
 (provide 'org-annot-bridge)
 ;;; org-annot-bridge.el ends here
