@@ -1,7 +1,8 @@
-;;; org-book-note.el --- Better reading note experience  -*- lexical-binding: t; -*-
+;;; org-annot-bridge.el --- Build bridge between annot and org-mode.  -*- lexical-binding: t; -*-
 
 ;; Author: Yuchen Li
-;; Url: https://github.com/yuchen-lea/org-book-note
+;; Url: https://github.com/yuchen-lea/org-annot-bridge
+;; Package-Requires: ((emacs "24.4") (org "9.3") (transient "0.1.0"))
 
 ;;; Commentary:
 ;;; License:
@@ -26,21 +27,21 @@
 
 ;;;; Customization
 
-(defgroup org-book-note nil
-  "Help you manage book notes in org-noter."
-  :prefix "org-book-note-"
+(defgroup org-annot-bridge nil
+  "Build bridge between annot and org-mode."
+  :prefix "org-annot-bridge-"
   :group 'org)
 
-(defcustom org-book-note-image-dir org-directory
+(defcustom org-annot-bridge-image-dir org-directory
   "Directory to store extracted note images."
   :type 'directory)
 
 
-(defcustom org-book-note-image-zoom-factor 4.0
+(defcustom org-annot-bridge-image-zoom-factor 4.0
   "Default zoom factor for exported images."
   :type 'number)
 
-(defcustom org-book-note-annot-template nil
+(defcustom org-annot-bridge-annot-template nil
   "Template for annotation items using mako template syntax.
 
 If this is nil, the default template from pdfhelper will be used.
@@ -48,7 +49,7 @@ For more details on the template syntax, see:
 https://github.com/yuchen-lea/pdfhelper"
   :type 'string)
 
-(defcustom org-book-note-toc-template nil
+(defcustom org-annot-bridge-toc-template nil
   "Template for table of contents items using mako template syntax.
 
 If this is nil, the default template from pdfhelper will be used.
@@ -56,7 +57,7 @@ For more details on the template syntax, see:
 https://github.com/yuchen-lea/pdfhelper"
   :type 'string)
 
-(defcustom org-book-note-bib-files nil
+(defcustom org-annot-bridge-bib-files nil
   "List of paths to .bib files to find cite key."
   :type '(repeat file))
 
@@ -64,9 +65,8 @@ https://github.com/yuchen-lea/pdfhelper"
 ;;;; Variables
 ;;;; Commands
 
-
-(defun org-book-note-check-pdfhelper-version ()
-  "Check if the pdfhelper command-line program exists and its version is >= 2.3.1."
+(defun org-annot-bridge-check-pdfhelper-version ()
+  "Check if the pdfhelper program exists and its version is >= 2.3.1."
   (interactive)
   (let ((pdfhelper-path (executable-find "pdfhelper"))
         (required-version "2.3.1"))
@@ -75,24 +75,24 @@ https://github.com/yuchen-lea/pdfhelper"
       (let ((current-version (string-trim (shell-command-to-string "pdfhelper --version"))))
         (if (version< current-version required-version)
             (error "Your pdfhelper version (%s) is outdated. Please upgrade to the latest version from https://github.com/yuchen-lea/pdfhelper"
-                     current-version)
+                   current-version)
           (message "pdfhelper version is sufficient."))))))
 
 ;;;;; PDF
 
 ;;;###autoload
-(defun org-book-note-insert-pdf-annots (pdf-path)
+(defun org-annot-bridge-insert-pdf-annots (pdf-path)
   "Insert annotations of a PDF file using pdfhelper.
 If PDF-PATH is not provided, prompt the user to select a PDF file."
   (interactive (list (read-file-name "Select a PDF file: " nil
                                      nil t)))
-  (org-book-note-check-pdfhelper-version)
+  (org-annot-bridge-check-pdfhelper-version)
   (unless (and (f-exists? pdf-path)
                (string= (file-name-extension pdf-path)
                         "pdf"))
     (error "The provided file is not a valid PDF"))
   ;; Execute the shell command asynchronously
-  (bookmark-set "org-book-note-temp-bookmark")
+  (bookmark-set "org-annot-bridge-temp-bookmark")
   (let* ((output-buffer (generate-new-buffer "*pdfhelper-output*"))
          (async-shell-command-display-buffer nil)
          (proc (progn
@@ -105,34 +105,34 @@ If PDF-PATH is not provided, prompt the user to select a PDF file."
                               #'(lambda (process signal)
                                   (when (memq (process-status process)
                                               '(exit signal))
-                                    (bookmark-jump "org-book-note-temp-bookmark")
+                                    (bookmark-jump "org-annot-bridge-temp-bookmark")
                                     (sleep-for 1)
                                     (goto-char (org-element-property :end (org-element-context)))
                                     (yank)
-                                    (bookmark-delete "org-book-note-temp-bookmark")
+                                    (bookmark-delete "org-annot-bridge-temp-bookmark")
                                     (shell-command-sentinel process signal))))
       (message-box "No process running."))))
 
 (defun org-noter-note--pdfhelper-export-annot-cmd (pdf-path)
   (let* ((test-p (y-or-n-p "Run a test first?"))
-        ;; (ocr-p (y-or-n-p "OCR on picture?"))
-        (with-toc (y-or-n-p "With Toc?"))
-        ;; (ocr-service (if ocr-p (ido-completing-read "Pick ocr services:" '("paddle" "ocrspace")) ""))
-        ;; (ocr-language (if (string= ocr-service "ocrspace") (ido-completing-read "Pick ocr language:" '("zh-Hans" "zh-Hant" "en" "ja")) ""))
-        (zoom-factor (read-number "Enter image zoom factor: " org-book-note-image-zoom-factor)))
+         ;; (ocr-p (y-or-n-p "OCR on picture?"))
+         (with-toc (y-or-n-p "With Toc?"))
+         ;; (ocr-service (if ocr-p (ido-completing-read "Pick ocr services:" '("paddle" "ocrspace")) ""))
+         ;; (ocr-language (if (string= ocr-service "ocrspace") (ido-completing-read "Pick ocr language:" '("zh-Hans" "zh-Hant" "en" "ja")) ""))
+         (zoom-factor (read-number "Enter image zoom factor: " org-annot-bridge-image-zoom-factor)))
     (mapconcat #'identity
                (list "pdfhelper export-annot"
                      (if with-toc "--with-toc" "")
                      (format "--image-zoom %s"
-                             (if (> zoom-factor 0) zoom-factor org-book-note-image-zoom-factor))
+                             (if (> zoom-factor 0) zoom-factor w))
                      ;; (if ocr-p
                      ;;     (format "--ocr-service '%s'" ocr-service)
                      ;;   "")
                      ;; (format "--ocr-language '%s'" ocr-language)
-                     (format "--annot-image-dir '%s'" org-book-note-image-dir)
-                     (if org-book-note-bib-files (format "--bib-path %s" (mapconcat (lambda (item) (format "'%s'" item)) org-book-note-bib-files " ")))
-                     (if org-book-note-annot-template (format "--annot-list-item-format '%s'" org-book-note-annot-template))
-                     (if org-book-note-toc-template (format "--toc-list-item-format '%s'" org-book-note-toc-template))
+                     (format "--annot-image-dir '%s'" org-annot-bridge-image-dir)
+                     (if org-annot-bridge-bib-files (format "--bib-path %s" (mapconcat (lambda (item) (format "'%s'" item)) org-annot-bridge-bib-files " ")))
+                     (if org-annot-bridge-annot-template (format "--annot-list-item-format '%s'" org-annot-bridge-annot-template))
+                     (if org-annot-bridge-toc-template (format "--toc-list-item-format '%s'" org-annot-bridge-toc-template))
                      (if test-p "--run-test")
                      (format "'%s'" pdf-path)
                      ;; TODO cross-platform
@@ -144,5 +144,6 @@ If PDF-PATH is not provided, prompt the user to select a PDF file."
                                      '(cygwin windows-nt ms-dos)) "clip.exe"))))
                " ")))
 ;;;; Footer
-(provide 'org-book-note)
-;;; org-book-note.el ends here
+
+(provide 'org-annot-bridge)
+;;; org-annot-bridge.el ends here
