@@ -1,5 +1,3 @@
-⭐ v2 is under development and no longer relies on org-noter and pdf-tool.
-
 [[file:README_CN.org][中文文档]]
 
 Extract outline and annotations to a org-mode note from PDF files.
