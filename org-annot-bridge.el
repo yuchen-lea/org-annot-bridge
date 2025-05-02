@@ -2,7 +2,8 @@
 
 ;; Author: Yuchen Li
 ;; Url: https://github.com/yuchen-lea/org-annot-bridge
-;; Package-Requires: ((emacs "24.4") (org "9.3") (transient "0.1.0"))
+;; Version: 0.0.2
+;; Package-Requires: ((emacs "24.4") (transient "0.1.0"))
 
 ;;; Commentary:
 ;;; License:

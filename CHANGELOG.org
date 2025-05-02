@@ -1,0 +1,4 @@
+- [2025-05-03] Version =0.0.2=
+  - add =pdf= link in pdf-view mode
+- [2025-05-03] Version =0.0.1=
+  - Extract pdf annot

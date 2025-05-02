@@ -1,3 +1,5 @@
 [[file:README_CN.org][中文文档]]
 
+[[file:CHANGELOG.org][Changelog]]
+
 Extract outline and annotations to a org-mode note from PDF files.
