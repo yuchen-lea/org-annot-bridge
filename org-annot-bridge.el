@@ -82,8 +82,8 @@ https://github.com/yuchen-lea/pdfhelper"
                    current-version)
           (message "pdfhelper version is sufficient."))))))
 
-;;;;; PDF
-
+;;;; PDF
+;;;;; PDF transient
 (defun org-annot-bridge-pdfhelper-export-annot (&optional args)
   "Run `pdfhelper export-annot` with the provided options."
   (interactive (list (transient-args 'org-annot-bridge-export-pdf-annot-transient)))
@@ -155,7 +155,76 @@ https://github.com/yuchen-lea/pdfhelper"
   ["Actions"
    ("RET" "export-annot" org-annot-bridge-pdfhelper-export-annot)])
 
+;;;;; PDF link
 
+(defcustom org-annot-bridge-pdf-link-prefix "pdf"
+  "Prefix for pdf link"
+  :type 'string)
+
+(defcustom org-annot-bridge-path-generator #'abbreviate-file-name
+  "Translate file path the way you like. Take full-path as the argument."
+  :type 'function)
+
+(defcustom org-annot-bridge-path-resolver #'expand-file-name
+  "Resolve your translated PDF file path back to an absolute path."
+  :type 'function)
+
+(require 'pdf-view)
+
+;;;###autoload
+(defun org-annot-bridge-store-pdf-link ()
+  "Store a link to a pdfview buffer."
+  (cond
+   ((eq major-mode 'pdf-view-mode)
+    (let* ((file (funcall org-annot-bridge-path-generator (pdf-view-buffer-file-name)))
+           (page (number-to-string (pdf-view-current-page)))
+           (height (org-annot-bridge--pdf-height-percent))
+	   (locator (format "%s++%s" page height)))
+      ;; pdf://path::page++height_percent
+      (org-link-store-props :type org-annot-bridge-pdf-link-prefix
+                              :link (format "%s:%s::%s"
+					    org-annot-bridge-pdf-link-prefix
+                                            file locator)
+                              :description locator)))))
+
+(defun org-annot-bridge--pdf-height-percent ()
+  "Return current pdf height percent, a float value between 0 and 1."
+  (let* ((height (/ (or (image-mode-window-get 'vscroll)
+                           0)
+                    (float (cdr (pdf-view-image-size))))))
+    (format "%.2f" height)))
+
+;; pdf://path::page++height_percent
+(defun org-annot-bridge-open-pdf-link (link)
+  "Internal function to open pdf LINK."
+  (let ((link-regexp "\\(.*\\)::\\([0-9]*\\)\\(\\+\\+\\)?\\([[0-9]\\.*[0-9]*\\)?"))
+    (cond
+     ((string-match link-regexp link)
+      (let ((path (match-string 1 link))
+            (page (match-string 2 link))
+            (height (match-string 4 link)))
+        (if (and path
+                 (not (string-empty-p path))
+                 (file-exists-p path))
+            (org-open-file (funcall org-annot-bridge-path-resolver path)
+                           1))
+        (if (and page
+                 (not (string-empty-p page)))
+            (progn
+              (setq page (string-to-number page))
+              (pdf-view-goto-page page))
+          (setq page nil))
+        (when (and height
+                   (not (string-empty-p height)))
+          (image-set-window-vscroll (round (* (string-to-number height)
+                                                 (cdr (pdf-view-image-size))))))))
+     ((org-open-file link 1)))))
+;;;###autoload
+(defun org-annot-bridge-setup-link ()
+  "Set up pdf: links in org-mode."
+  (org-link-set-parameters org-annot-bridge-pdf-link-prefix
+                           :follow #'org-annot-bridge-open-pdf-link
+                           :store #'org-annot-bridge-store-pdf-link))
 ;;;; Footer
 (provide 'org-annot-bridge)
 ;;; org-annot-bridge.el ends here
