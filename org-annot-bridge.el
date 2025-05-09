@@ -180,7 +180,9 @@ https://github.com/yuchen-lea/pdfhelper"
     (let* ((file (funcall org-annot-bridge-path-generator (pdf-view-buffer-file-name)))
            (page (number-to-string (pdf-view-current-page)))
            (height (org-annot-bridge--pdf-height-percent))
-	   (locator (format "%s++%s" page height)))
+	   (locator (if (string= "0.00" (org-annot-bridge--pdf-height-percent))
+			 page
+		       (format "%s++%s" page height))))
       ;; pdf://path::page++height_percent
       (org-link-store-props :type org-annot-bridge-pdf-link-prefix
                               :link (format "%s:%s::%s"
@@ -191,8 +193,8 @@ https://github.com/yuchen-lea/pdfhelper"
 (defun org-annot-bridge--pdf-height-percent ()
   "Return current pdf height percent, a float value between 0 and 1."
   (let* ((height (/ (or (image-mode-window-get 'vscroll)
-                           0)
-                    (float (cdr (pdf-view-image-size))))))
+			0)
+		    (float (cdr (pdf-view-image-size))))))
     (format "%.2f" height)))
 
 ;; pdf://path::page++height_percent
